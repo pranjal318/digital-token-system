@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Smart Queue System</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<h1>Smart Queue Management System</h1>
+
+<div>
+    <h2>User Panel</h2>
+    <h3>Your Token: <span id="userToken">-</span></h3>
+    <button onclick="generateToken()">Get Token</button>
+</div>
+
+<hr>
+
+<div>
+    <h2>Admin Panel</h2>
+    <h3>Current Token: <span id="currentToken">0</span></h3>
+    <h3>Waiting: <span id="waiting">0</span></h3>
+    <button onclick="nextToken()">Next Token</button>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
