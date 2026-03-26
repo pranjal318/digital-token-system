@@ -1,31 +1,156 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Smart Queue System</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
 </head>
 <body>
+    <div class="page-shell">
+        <div class="ambient ambient-one"></div>
+        <div class="ambient ambient-two"></div>
 
-<h1>Smart Queue Management System</h1>
+        <main class="app-shell">
+            <nav class="topbar">
+                <div class="brand">
+                    <div class="brand-mark">SQ</div>
+                    <div>
+                        <strong>Smart Queue</strong>
+                        <span>Realtime token flow</span>
+                    </div>
+                </div>
 
-<div>
-    <h2>User Panel</h2>
-    <h3>Your Token: <span id="userToken">-</span></h3>
-    <button onclick="generateToken()">Get Token</button>
-</div>
+                <div class="topbar-pills">
+                    <span class="top-pill" id="queueStatusBadge">Queue open</span>
+                    <span class="top-pill muted" id="sessionDateLabel">Session --</span>
+                </div>
+            </nav>
 
-<hr>
+            <section class="hero-card">
+                <div class="hero-copy">
+                    <span class="eyebrow">Smart Queue System</span>
+                    <h1>Simple queue management with clear live status.</h1>
+                    <p>Generate tokens, manage the current queue, and monitor daily activity from a clean dashboard.</p>
+                </div>
 
-<div>
-    <h2>Admin Panel</h2>
-    <h3>Current Token: <span id="currentToken">0</span></h3>
-    <h3>Waiting: <span id="waiting">0</span></h3>
-    <button onclick="nextToken()">Next Token</button>
-</div>
+                <div class="hero-stats">
+                    <div class="stat-tile">
+                        <span class="stat-label">Current token</span>
+                        <strong class="stat-value" id="currentToken">0</strong>
+                    </div>
+                    <div class="stat-tile">
+                        <span class="stat-label">People waiting</span>
+                        <strong class="stat-value" id="waiting">0</strong>
+                    </div>
+                    <div class="stat-tile compact">
+                        <span class="stat-label">Total issued today</span>
+                        <strong class="stat-value small" id="totalTokens">0</strong>
+                    </div>
+                </div>
+            </section>
 
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-<script src="script.js"></script>
+            <section class="panel-grid">
+                <article class="panel panel-user">
+                    <div class="panel-header">
+                        <div>
+                            <span class="panel-kicker">User panel</span>
+                            <h2>Get your token</h2>
+                        </div>
+                        <span class="panel-badge">Live</span>
+                    </div>
+
+                    <div class="token-card">
+                        <span class="token-label">Your token</span>
+                        <strong class="token-value" id="userToken">-</strong>
+                        <p class="token-note" id="userTokenNote">Generate a token and keep this screen open for alerts.</p>
+                    </div>
+
+                    <button class="primary-btn" id="generateTokenBtn">Generate Token</button>
+
+                    <label class="input-group" for="alertBefore">
+                        <span>Notification reminder</span>
+                        <input type="number" id="alertBefore" placeholder="Alert me 3 tokens before" min="0">
+                    </label>
+                </article>
+
+                <article class="panel panel-admin">
+                    <div class="panel-header">
+                        <div>
+                            <span class="panel-kicker">Admin panel</span>
+                            <h2>Queue control</h2>
+                        </div>
+                        <span class="panel-badge" id="adminStateBadge">Ready</span>
+                    </div>
+
+                    <div class="meta-grid">
+                        <div class="meta-card">
+                            <span class="meta-label">Crowd level</span>
+                            <strong id="crowdStatus">-</strong>
+                            <p class="meta-note">Based on the current waiting count.</p>
+                        </div>
+                        <div class="meta-card">
+                            <span class="meta-label">Estimated wait</span>
+                            <strong id="delay">-</strong>
+                            <p class="meta-note">Using the live average service time.</p>
+                        </div>
+                    </div>
+
+                    <div class="admin-actions">
+                        <button class="secondary-btn" id="nextTokenBtn" data-admin-action>Call Next Token</button>
+                        <button class="ghost-btn" id="markServedBtn" data-admin-action>Mark Served</button>
+                        <button class="ghost-btn" id="markMissedBtn" data-admin-action>Mark Missed</button>
+                        <button class="ghost-btn" id="toggleQueueBtn" data-admin-action>Pause / Resume</button>
+                        <button class="danger-btn" id="closeQueueBtn" data-admin-action>Close Queue</button>
+                    </div>
+                </article>
+            </section>
+
+            <section class="panel lower-grid">
+                <div class="panel-header">
+                    <div>
+                        <span class="panel-kicker">Today</span>
+                        <h2>Session overview</h2>
+                    </div>
+                    <span class="panel-badge" id="sessionModeBadge">Open</span>
+                </div>
+
+                <div class="overview-grid">
+                    <div class="overview-card">
+                        <span class="meta-label">Current stage</span>
+                        <strong id="queueStage">Accepting tokens</strong>
+                        <p class="meta-note">Changes automatically when the queue is paused or closed.</p>
+                    </div>
+                    <div class="overview-card">
+                        <span class="meta-label">Last update</span>
+                        <strong id="lastUpdated">-</strong>
+                        <p class="meta-note">Useful for checking that the system is still syncing.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section class="panel lower-grid">
+                <div class="panel-header">
+                    <div>
+                        <span class="panel-kicker">History</span>
+                        <h2>Recent tokens</h2>
+                    </div>
+                    <span class="panel-badge alt">Today only</span>
+                </div>
+
+                <div class="history-list" id="historyList">
+                    <div class="empty-state">No tokens generated yet for today.</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>

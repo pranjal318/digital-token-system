@@ -1,10 +1,10 @@
 {
   "name": "Smart Queue System",
   "short_name": "QueueApp",
-  "start_url": "index.html",
+  "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#4CAF50",
+  "background_color": "#07131f",
+  "theme_color": "#10243c",
   "icons": [
     {
       "src": "icon.png",
