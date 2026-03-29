@@ -15,6 +15,7 @@ const timestamp = firebase.firestore.FieldValue.serverTimestamp;
 
 const AVG_SERVICE_MINUTES = 2;
 const HISTORY_LIMIT = 8;
+const USER_STATE_STORAGE_KEY = "smartQueueUserState";
 
 let alertBefore = 0;
 let currentSessionDate = getTodayKey();
@@ -22,9 +23,13 @@ let currentLiveData = null;
 let liveUnsubscribe = null;
 let historyUnsubscribe = null;
 let lastAlertKey = "";
+let userState = loadUserState();
+let emailJsReady = false;
 
 const userTokenElement = document.getElementById("userToken");
 const userTokenNoteElement = document.getElementById("userTokenNote");
+const userPositionElement = document.getElementById("userPosition");
+const userEtaElement = document.getElementById("userEta");
 const currentTokenElement = document.getElementById("currentToken");
 const waitingElement = document.getElementById("waiting");
 const totalTokensElement = document.getElementById("totalTokens");
@@ -38,33 +43,64 @@ const lastUpdatedElement = document.getElementById("lastUpdated");
 const historyListElement = document.getElementById("historyList");
 const generateTokenButton = document.getElementById("generateTokenBtn");
 const alertBeforeElement = document.getElementById("alertBefore");
+const emailAddressElement = document.getElementById("emailAddress");
 const adminStateBadgeElement = document.getElementById("adminStateBadge");
 const nextTokenButton = document.getElementById("nextTokenBtn");
 const markServedButton = document.getElementById("markServedBtn");
 const markMissedButton = document.getElementById("markMissedBtn");
+const sendEmailButton = document.getElementById("sendEmailBtn");
 const toggleQueueButton = document.getElementById("toggleQueueBtn");
 const closeQueueButton = document.getElementById("closeQueueBtn");
 const adminActionButtons = Array.from(document.querySelectorAll("[data-admin-action]"));
 
-alertBeforeElement.addEventListener("input", (event) => {
-    alertBefore = parseInt(event.target.value, 10) || 0;
-});
+if (alertBeforeElement) {
+    alertBeforeElement.addEventListener("input", (event) => {
+        alertBefore = parseInt(event.target.value, 10) || 0;
+        if (userState.sessionDate === currentSessionDate && userState.tokenNumber) {
+            userState.alertBefore = alertBefore;
+            saveUserState();
+        }
+    });
+}
 
-generateTokenButton.addEventListener("click", generateToken);
-nextTokenButton.addEventListener("click", nextToken);
-markServedButton.addEventListener("click", markCurrentTokenServed);
-markMissedButton.addEventListener("click", markCurrentTokenMissed);
-toggleQueueButton.addEventListener("click", toggleQueueStatus);
-closeQueueButton.addEventListener("click", closeQueueForToday);
+if (generateTokenButton) {
+    generateTokenButton.addEventListener("click", generateToken);
+}
+
+if (nextTokenButton) {
+    nextTokenButton.addEventListener("click", nextToken);
+}
+
+if (markServedButton) {
+    markServedButton.addEventListener("click", markCurrentTokenServed);
+}
+
+if (markMissedButton) {
+    markMissedButton.addEventListener("click", markCurrentTokenMissed);
+}
+
+if (sendEmailButton) {
+    sendEmailButton.addEventListener("click", sendEmailForCurrentToken);
+}
+
+if (toggleQueueButton) {
+    toggleQueueButton.addEventListener("click", toggleQueueStatus);
+}
+
+if (closeQueueButton) {
+    closeQueueButton.addEventListener("click", closeQueueForToday);
+}
 
 if ("Notification" in window && Notification.permission !== "granted") {
     Notification.requestPermission();
 }
 
+initEmailJs();
 init().catch(handleAppError);
 
 async function init() {
     await ensureSessionExists(currentSessionDate);
+    restoreUserStateForToday();
     updateAdminUI();
     subscribeToSession(currentSessionDate);
 }
@@ -126,16 +162,18 @@ function subscribeToSession(sessionDate) {
         notifyIfNearTurn(currentLiveData.currentToken || 0);
     }, handleAppError);
 
-    historyUnsubscribe = tokensRef
-        .orderBy("tokenNumber", "desc")
-        .limit(HISTORY_LIMIT)
-        .onSnapshot((snapshot) => {
-            const tokens = snapshot.docs.map((doc) => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            renderHistory(tokens);
-        }, handleAppError);
+    if (historyListElement) {
+        historyUnsubscribe = tokensRef
+            .orderBy("tokenNumber", "desc")
+            .limit(HISTORY_LIMIT)
+            .onSnapshot((snapshot) => {
+                const tokens = snapshot.docs.map((doc) => ({
+                    id: doc.id,
+                    ...doc.data()
+                }));
+                renderHistory(tokens);
+            }, handleAppError);
+    }
 }
 
 function renderLiveData(data) {
@@ -146,21 +184,21 @@ function renderLiveData(data) {
     const avgServiceMinutes = data.avgServiceMinutes || AVG_SERVICE_MINUTES;
     const crowdLevel = data.crowdLevel || getCrowdLevel(waitingCount);
 
-    currentTokenElement.innerText = currentToken;
-    totalTokensElement.innerText = totalTokens;
-    waitingElement.innerText = waitingCount;
-    crowdStatusElement.innerText = crowdLevel;
-    delayElement.innerText = waitingCount * avgServiceMinutes + " mins";
+    setText(currentTokenElement, currentToken);
+    setText(totalTokensElement, totalTokens);
+    setText(waitingElement, waitingCount);
+    setText(crowdStatusElement, crowdLevel);
+    setText(delayElement, waitingCount * avgServiceMinutes + " mins");
 
-    queueStatusBadgeElement.innerText = "Queue " + queueStatus;
-    queueStatusBadgeElement.className = "top-pill" + (queueStatus === "open" ? "" : " muted");
+    setText(queueStatusBadgeElement, "Queue " + queueStatus);
+    setClassName(queueStatusBadgeElement, "top-pill" + (queueStatus === "open" ? "" : " muted"));
 
-    sessionDateLabelElement.innerText = "Session " + (data.date || currentSessionDate);
-    sessionModeBadgeElement.innerText = capitalize(queueStatus);
-    sessionModeBadgeElement.className = "panel-badge" + (queueStatus === "open" ? "" : " alt");
+    setText(sessionDateLabelElement, "Session " + (data.date || currentSessionDate));
+    setText(sessionModeBadgeElement, capitalize(queueStatus));
+    setClassName(sessionModeBadgeElement, "panel-badge" + (queueStatus === "open" ? "" : " alt"));
 
-    queueStageElement.innerText = getQueueStageLabel(queueStatus);
-    lastUpdatedElement.innerText = formatTimestamp(data.lastUpdatedAt);
+    setText(queueStageElement, getQueueStageLabel(queueStatus));
+    setText(lastUpdatedElement, formatTimestamp(data.lastUpdatedAt));
 
     if (toggleQueueButton) {
         toggleQueueButton.innerText = queueStatus === "open" ? "Pause Queue" : "Open Queue";
@@ -170,15 +208,25 @@ function renderLiveData(data) {
         closeQueueButton.disabled = queueStatus === "closed";
     }
 
-    generateTokenButton.disabled = queueStatus !== "open";
-    userTokenNoteElement.innerText = queueStatus === "open"
-        ? "Generate a token and keep this screen open for alerts."
-        : "Token generation is unavailable while the queue is " + queueStatus + ".";
+    if (generateTokenButton) {
+        generateTokenButton.disabled = queueStatus !== "open";
+    }
 
+    if (userTokenNoteElement && !getUserTokenNumber()) {
+        userTokenNoteElement.innerText = queueStatus === "open"
+            ? "Generate a token and keep this screen open for alerts."
+            : "Token generation is unavailable while the queue is " + queueStatus + ".";
+    }
+
+    renderUserQueueInsights();
     updateAdminButtonsState();
 }
 
 function renderHistory(tokens) {
+    if (!historyListElement) {
+        return;
+    }
+
     if (!tokens.length) {
         historyListElement.innerHTML = '<div class="empty-state">No tokens generated yet for today.</div>';
         return;
@@ -190,6 +238,7 @@ function renderHistory(tokens) {
                 <span class="meta-label">Token ${token.tokenNumber || "-"}</span>
                 <strong>${capitalize(token.status || "waiting")}</strong>
                 <p class="meta-note">${getTokenSubtitle(token)}</p>
+                <p class="meta-note">${getEmailLabel(token.emailAddress)}</p>
             </div>
             <div class="history-meta">
                 <span class="status-badge ${token.status || "waiting"}">${capitalize(token.status || "waiting")}</span>
@@ -205,9 +254,13 @@ function getTokenSubtitle(token) {
     return "Created at " + formatTimestamp(token.createdAt);
 }
 
+function getEmailLabel(value) {
+    return value ? "Email: " + value : "Email: not provided";
+}
+
 function updateAdminUI() {
-    adminStateBadgeElement.innerText = "Ready";
-    adminStateBadgeElement.className = "panel-badge";
+    setText(adminStateBadgeElement, "Ready");
+    setClassName(adminStateBadgeElement, "panel-badge");
     updateAdminButtonsState();
 }
 
@@ -233,6 +286,10 @@ function updateAdminButtonsState() {
 
     if (markMissedButton) {
         markMissedButton.disabled = queueStatus !== "open" || !currentToken;
+    }
+
+    if (sendEmailButton) {
+        sendEmailButton.disabled = !currentToken;
     }
 
     if (toggleQueueButton) {
@@ -264,6 +321,63 @@ function getQueueStageLabel(queueStatus) {
     return "Accepting tokens";
 }
 
+function initEmailJs() {
+    if (!window.emailjs || !window.EMAILJS_CONFIG || !window.EMAILJS_CONFIG.publicKey) {
+        return;
+    }
+
+    if (window.EMAILJS_CONFIG.publicKey === "PASTE_EMAILJS_PUBLIC_KEY") {
+        return;
+    }
+
+    window.emailjs.init({
+        publicKey: window.EMAILJS_CONFIG.publicKey
+    });
+    emailJsReady = true;
+}
+
+function sanitizeEmail(value) {
+    return (value || "").trim().toLowerCase();
+}
+
+function isValidEmail(value) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function buildEmailSubject(tokenNumber) {
+    return "Smart Queue update for token " + tokenNumber;
+}
+
+function buildEmailBody(tokenNumber) {
+    const queueLabel = currentLiveData && currentLiveData.queueStatus
+        ? capitalize(currentLiveData.queueStatus)
+        : "Open";
+    return [
+        "Hello,",
+        "",
+        "This is an update for your Smart Queue token " + tokenNumber + ".",
+        "Current queue status: " + queueLabel + ".",
+        "Please be ready for your turn.",
+        "",
+        "Thank you."
+    ].join("\n");
+}
+
+function buildEmailTemplateParams(tokenNumber, emailAddress) {
+    const queueStatus = currentLiveData && currentLiveData.queueStatus
+        ? capitalize(currentLiveData.queueStatus)
+        : "Open";
+
+    return {
+        to_email: emailAddress,
+        token_number: String(tokenNumber),
+        session_date: currentSessionDate,
+        queue_status: queueStatus,
+        message_title: buildEmailSubject(tokenNumber),
+        message_body: buildEmailBody(tokenNumber)
+    };
+}
+
 function formatTimestamp(value) {
     if (!value) return "Updating...";
     if (typeof value.toDate === "function") {
@@ -279,18 +393,152 @@ function capitalize(value) {
 function handleAppError(error) {
     console.error(error);
     currentLiveData = null;
-    generateTokenButton.disabled = true;
+
+    if (generateTokenButton) {
+        generateTokenButton.disabled = true;
+    }
+
     adminActionButtons.forEach((button) => {
         button.disabled = true;
     });
-    userTokenNoteElement.innerText = "Unable to connect to Firebase. Check Firestore rules and reload the app.";
-    queueStageElement.innerText = "Connection problem";
-    lastUpdatedElement.innerText = "Firebase error";
-    historyListElement.innerHTML = '<div class="empty-state">The app could not load queue data. Check Firebase configuration or Firestore permissions.</div>';
+
+    setText(userTokenNoteElement, "Unable to connect to Firebase. Check Firestore rules and reload the app.");
+    setText(userPositionElement, "-");
+    setText(userEtaElement, "-");
+    setText(queueStageElement, "Connection problem");
+    setText(lastUpdatedElement, "Firebase error");
+
+    if (historyListElement) {
+        historyListElement.innerHTML = '<div class="empty-state">The app could not load queue data. Check Firebase configuration or Firestore permissions.</div>';
+    }
+}
+
+function loadUserState() {
+    try {
+        const rawValue = window.localStorage.getItem(USER_STATE_STORAGE_KEY);
+        if (!rawValue) {
+            return createEmptyUserState();
+        }
+
+        const parsedValue = JSON.parse(rawValue);
+        return {
+            sessionDate: parsedValue.sessionDate || "",
+            tokenNumber: parsedValue.tokenNumber || null,
+            alertBefore: parsedValue.alertBefore || 0,
+            emailAddress: parsedValue.emailAddress || ""
+        };
+    } catch (error) {
+        console.warn("Unable to load saved user state", error);
+        return createEmptyUserState();
+    }
+}
+
+function createEmptyUserState() {
+    return {
+        sessionDate: "",
+        tokenNumber: null,
+        alertBefore: 0,
+        emailAddress: ""
+    };
+}
+
+function saveUserState() {
+    window.localStorage.setItem(USER_STATE_STORAGE_KEY, JSON.stringify(userState));
+}
+
+function clearUserState() {
+    userState = createEmptyUserState();
+    window.localStorage.removeItem(USER_STATE_STORAGE_KEY);
+}
+
+function restoreUserStateForToday() {
+    if (userState.sessionDate !== currentSessionDate || !userState.tokenNumber) {
+        clearRenderedUserState();
+        if (userState.sessionDate !== currentSessionDate) {
+            clearUserState();
+        }
+        return;
+    }
+
+    setText(userTokenElement, userState.tokenNumber);
+    alertBefore = userState.alertBefore || 0;
+
+    if (alertBeforeElement) {
+        alertBeforeElement.value = alertBefore ? alertBefore : "";
+    }
+
+    if (emailAddressElement) {
+        emailAddressElement.value = userState.emailAddress || "";
+    }
+
+    setText(userTokenNoteElement, "Your token was restored for today. Watch for live updates.");
+    renderUserQueueInsights();
+}
+
+function clearRenderedUserState() {
+    setText(userTokenElement, "-");
+    setText(userTokenNoteElement, "Generate a token and keep this screen open for alerts.");
+    setText(userPositionElement, "-");
+    setText(userEtaElement, "-");
+
+    if (alertBeforeElement && !userState.tokenNumber) {
+        alertBeforeElement.value = "";
+    }
+
+    if (emailAddressElement && !userState.tokenNumber) {
+        emailAddressElement.value = "";
+    }
+}
+
+function renderUserQueueInsights() {
+    const userToken = getUserTokenNumber();
+
+    if (!userPositionElement || !userEtaElement) {
+        return;
+    }
+
+    if (!userToken || !currentLiveData) {
+        userPositionElement.innerText = "-";
+        userEtaElement.innerText = "-";
+        return;
+    }
+
+    const currentToken = currentLiveData.currentToken || 0;
+    const avgServiceMinutes = currentLiveData.avgServiceMinutes || AVG_SERVICE_MINUTES;
+    const tokensAhead = Math.max(userToken - currentToken - 1, 0);
+
+    userPositionElement.innerText = tokensAhead === 0 ? "Next / now" : String(tokensAhead);
+
+    if (userToken <= currentToken) {
+        userEtaElement.innerText = "Now";
+        if (userTokenNoteElement && currentLiveData.queueStatus === "open") {
+            userTokenNoteElement.innerText = "Your token is active or has already been called. Please check the desk.";
+        }
+        return;
+    }
+
+    const etaMinutes = tokensAhead * avgServiceMinutes;
+    userEtaElement.innerText = etaMinutes <= 1 ? "Under 1 min" : etaMinutes + " mins";
+
+    if (!userTokenNoteElement) {
+        return;
+    }
+
+    if (currentLiveData.queueStatus === "paused") {
+        userTokenNoteElement.innerText = "Your token is saved. The queue is paused right now.";
+    } else if (currentLiveData.queueStatus === "closed") {
+        userTokenNoteElement.innerText = "Your token is saved, but today's queue is now closed.";
+    } else {
+        userTokenNoteElement.innerText = "You have " + tokensAhead + " people ahead of you. Stay ready for your turn.";
+    }
+}
+
+function getUserTokenNumber() {
+    return userTokenElement ? parseInt(userTokenElement.innerText, 10) : 0;
 }
 
 function notifyIfNearTurn(currentToken) {
-    const userToken = parseInt(userTokenElement.innerText, 10);
+    const userToken = getUserTokenNumber();
     if (!userToken || !alertBefore) return;
 
     if (userToken - currentToken === alertBefore) {
@@ -310,6 +558,12 @@ function notifyIfNearTurn(currentToken) {
 async function generateToken() {
     if (!currentLiveData || currentLiveData.queueStatus !== "open") {
         alert("The queue is not open right now.");
+        return;
+    }
+
+    const emailAddress = sanitizeEmail(emailAddressElement ? emailAddressElement.value : "");
+    if (emailAddress && !isValidEmail(emailAddress)) {
+        alert("Enter a valid email address.");
         return;
     }
 
@@ -334,7 +588,8 @@ async function generateToken() {
                 calledAt: null,
                 servedAt: null,
                 missedAt: null,
-                notifyBefore: alertBefore
+                notifyBefore: alertBefore,
+                emailAddress
             });
 
             transaction.set(liveRef, {
@@ -347,8 +602,22 @@ async function generateToken() {
             return tokenNumber;
         });
 
-        userTokenElement.innerText = newToken;
-        userTokenNoteElement.innerText = "You are in today's queue. Watch for live updates.";
+        userState = {
+            sessionDate: currentSessionDate,
+            tokenNumber: newToken,
+            alertBefore,
+            emailAddress
+        };
+        saveUserState();
+
+        setText(userTokenElement, newToken);
+        renderUserQueueInsights();
+        setText(
+            userTokenNoteElement,
+            emailAddress
+                ? "You are in today's queue. Your email was saved for automatic updates."
+                : "You are in today's queue. Watch for live updates."
+        );
     } catch (error) {
         alert(error.message || "Unable to generate token.");
     }
@@ -393,6 +662,13 @@ async function nextToken() {
 
         const message = new SpeechSynthesisUtterance("Token " + next + " please come");
         speechSynthesis.speak(message);
+
+        try {
+            await sendEmailForToken(next, { silent: true });
+        } catch (emailError) {
+            console.error("Automatic email failed", emailError);
+            alert("Token called successfully, but the email could not be sent. Check EmailJS settings.");
+        }
     } catch (error) {
         alert(error.message || "Unable to call the next token.");
     }
@@ -464,6 +740,70 @@ async function closeQueueForToday() {
     }
 }
 
+async function sendEmailForCurrentToken() {
+    if (!requireAdminAccess()) return;
+
+    const currentToken = currentLiveData.currentToken || 0;
+    if (!currentToken) {
+        alert("No token has been called yet.");
+        return;
+    }
+
+    try {
+        await sendEmailForToken(currentToken, { silent: false });
+    } catch (error) {
+        alert(error.message || "Unable to send the email.");
+    }
+}
+
+async function sendEmailForToken(tokenNumber, options = {}) {
+    const { silent = false } = options;
+
+    if (!emailJsReady) {
+        throw new Error("EmailJS is not configured yet. Update emailjs-config.js first.");
+    }
+
+    const config = window.EMAILJS_CONFIG || {};
+    if (!config.serviceId || !config.templateId) {
+        throw new Error("EmailJS service or template ID is missing.");
+    }
+
+    if (config.serviceId === "PASTE_EMAILJS_SERVICE_ID" || config.templateId === "PASTE_EMAILJS_TEMPLATE_ID") {
+        throw new Error("EmailJS service or template ID is still using the placeholder value.");
+    }
+
+    const { tokensRef } = getSessionRefs(currentSessionDate);
+    const tokenDoc = await tokensRef.doc("token_" + tokenNumber).get();
+    const tokenData = tokenDoc.data();
+    const emailAddress = sanitizeEmail(tokenData && tokenData.emailAddress);
+
+    if (!emailAddress || !isValidEmail(emailAddress)) {
+        throw new Error("This token does not have a valid email address.");
+    }
+
+    await window.emailjs.send(
+        config.serviceId,
+        config.templateId,
+        buildEmailTemplateParams(tokenNumber, emailAddress)
+    );
+
+    if (!silent) {
+        alert("Email sent successfully.");
+    }
+}
+
+function setText(element, value) {
+    if (element) {
+        element.innerText = value;
+    }
+}
+
+function setClassName(element, value) {
+    if (element) {
+        element.className = value;
+    }
+}
+
 if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("service-worker.js")
         .then(() => console.log("Service Worker Registered"));
@@ -473,5 +813,6 @@ window.generateToken = generateToken;
 window.nextToken = nextToken;
 window.markCurrentTokenServed = markCurrentTokenServed;
 window.markCurrentTokenMissed = markCurrentTokenMissed;
+window.sendEmailForCurrentToken = sendEmailForCurrentToken;
 window.toggleQueueStatus = toggleQueueStatus;
 window.closeQueueForToday = closeQueueForToday;

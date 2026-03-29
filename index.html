@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Queue System</title>
+    <title>Smart Queue User</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <link rel="manifest" href="manifest.json">
 </head>
-<body>
+<body data-view="user">
     <div class="page-shell">
         <div class="ambient ambient-one"></div>
         <div class="ambient ambient-two"></div>
@@ -25,17 +25,24 @@
                     </div>
                 </div>
 
-                <div class="topbar-pills">
-                    <span class="top-pill" id="queueStatusBadge">Queue open</span>
-                    <span class="top-pill muted" id="sessionDateLabel">Session --</span>
+                <div class="topbar-side">
+                    <div class="view-switcher" aria-label="Panel switcher">
+                        <a class="view-link active" href="index.html">User</a>
+                        <a class="view-link" href="admin.html">Admin</a>
+                    </div>
+
+                    <div class="topbar-pills">
+                        <span class="top-pill" id="queueStatusBadge">Queue open</span>
+                        <span class="top-pill muted" id="sessionDateLabel">Session --</span>
+                    </div>
                 </div>
             </nav>
 
             <section class="hero-card">
                 <div class="hero-copy">
-                    <span class="eyebrow">Smart Queue System</span>
-                    <h1>Simple queue management with clear live status.</h1>
-                    <p>Generate tokens, manage the current queue, and monitor daily activity from a clean dashboard.</p>
+                    <span class="eyebrow">User Panel</span>
+                    <h1>Get your token and track your turn without confusion.</h1>
+                    <p>See the current queue, your live position, and your estimated wait from one simple screen.</p>
                 </div>
 
                 <div class="hero-stats">
@@ -54,60 +61,45 @@
                 </div>
             </section>
 
-            <section class="panel-grid">
-                <article class="panel panel-user">
-                    <div class="panel-header">
-                        <div>
-                            <span class="panel-kicker">User panel</span>
-                            <h2>Get your token</h2>
-                        </div>
-                        <span class="panel-badge">Live</span>
+            <section class="panel">
+                <div class="panel-header">
+                    <div>
+                        <span class="panel-kicker">User panel</span>
+                        <h2>Get your token</h2>
                     </div>
+                    <span class="panel-badge">Live</span>
+                </div>
 
-                    <div class="token-card">
-                        <span class="token-label">Your token</span>
-                        <strong class="token-value" id="userToken">-</strong>
-                        <p class="token-note" id="userTokenNote">Generate a token and keep this screen open for alerts.</p>
+                <div class="token-card">
+                    <span class="token-label">Your token</span>
+                    <strong class="token-value" id="userToken">-</strong>
+                    <p class="token-note" id="userTokenNote">Generate a token and keep this screen open for alerts.</p>
+                </div>
+
+                <div class="user-insights">
+                    <div class="meta-card">
+                        <span class="meta-label">People ahead</span>
+                        <strong id="userPosition">-</strong>
+                        <p class="meta-note">Updates live as the queue moves.</p>
                     </div>
-
-                    <button class="primary-btn" id="generateTokenBtn">Generate Token</button>
-
-                    <label class="input-group" for="alertBefore">
-                        <span>Notification reminder</span>
-                        <input type="number" id="alertBefore" placeholder="Alert me 3 tokens before" min="0">
-                    </label>
-                </article>
-
-                <article class="panel panel-admin">
-                    <div class="panel-header">
-                        <div>
-                            <span class="panel-kicker">Admin panel</span>
-                            <h2>Queue control</h2>
-                        </div>
-                        <span class="panel-badge" id="adminStateBadge">Ready</span>
+                    <div class="meta-card">
+                        <span class="meta-label">Your ETA</span>
+                        <strong id="userEta">-</strong>
+                        <p class="meta-note">Estimated from the current service pace.</p>
                     </div>
+                </div>
 
-                    <div class="meta-grid">
-                        <div class="meta-card">
-                            <span class="meta-label">Crowd level</span>
-                            <strong id="crowdStatus">-</strong>
-                            <p class="meta-note">Based on the current waiting count.</p>
-                        </div>
-                        <div class="meta-card">
-                            <span class="meta-label">Estimated wait</span>
-                            <strong id="delay">-</strong>
-                            <p class="meta-note">Using the live average service time.</p>
-                        </div>
-                    </div>
+                <button class="primary-btn" id="generateTokenBtn">Generate Token</button>
 
-                    <div class="admin-actions">
-                        <button class="secondary-btn" id="nextTokenBtn" data-admin-action>Call Next Token</button>
-                        <button class="ghost-btn" id="markServedBtn" data-admin-action>Mark Served</button>
-                        <button class="ghost-btn" id="markMissedBtn" data-admin-action>Mark Missed</button>
-                        <button class="ghost-btn" id="toggleQueueBtn" data-admin-action>Pause / Resume</button>
-                        <button class="danger-btn" id="closeQueueBtn" data-admin-action>Close Queue</button>
-                    </div>
-                </article>
+                <label class="input-group" for="alertBefore">
+                    <span>Notification reminder</span>
+                    <input type="number" id="alertBefore" placeholder="Alert me 3 tokens before" min="0">
+                </label>
+
+                <label class="input-group" for="emailAddress">
+                    <span>Email address</span>
+                    <input type="email" id="emailAddress" placeholder="Enter your email for automatic updates">
+                </label>
             </section>
 
             <section class="panel lower-grid">
@@ -132,25 +124,13 @@
                     </div>
                 </div>
             </section>
-
-            <section class="panel lower-grid">
-                <div class="panel-header">
-                    <div>
-                        <span class="panel-kicker">History</span>
-                        <h2>Recent tokens</h2>
-                    </div>
-                    <span class="panel-badge alt">Today only</span>
-                </div>
-
-                <div class="history-list" id="historyList">
-                    <div class="empty-state">No tokens generated yet for today.</div>
-                </div>
-            </section>
         </main>
     </div>
 
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@emailjs/browser@4/dist/email.min.js"></script>
+    <script src="emailjs-config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

@@ -1,7 +1,8 @@
-const CACHE_NAME = "smart-queue-v3";
+const CACHE_NAME = "smart-queue-v4";
 const APP_ASSETS = [
     "./",
     "./index.html",
+    "./admin.html",
     "./style.css",
     "./script.js",
     "./manifest.json",
